@@ -1,4 +1,4 @@
-use fantoccini::{Client, ClientBuilder, Locator, error::CmdError};
+use fantoccini::{error::CmdError, Client, ClientBuilder, Locator};
 use serde_json::Value;
 use tokio::process::Command;
 
@@ -50,29 +50,32 @@ async fn get_items(mut c: Client) -> Result<Vec<Value>, CmdError> {
         .as_array()
         .unwrap()
         .clone();
-    c.close().await?;
     Ok(items)
 }
 
-async fn search_lib(mut c: Client) -> Result<(),CmdError> {
-    print!("lib");
-    c.goto("'https://www.lib.city.ota.tokyo.jp/index.html'").await?;
+async fn search_lib(mut c: Client) -> Result<(), CmdError> {
+    c.goto("https://www.lib.city.ota.tokyo.jp/index.html")
+        .await?;
     c.wait_for_find(Locator::Css(".imeon")).await?;
-    let mut search = c.form(Locator::Css(".imeon")).await?;
-    search.set(Locator::Css(".imeon"), "hoge").await?;
+    const TYPE_TITLE: &str = r#"
+        const [callback] = arguments;
+        document.querySelector(".imeon").value = "日本大衆文化史";
+        callback();
+    "#;
+    c.execute_async(TYPE_TITLE, vec![]).await?;
+    c.find(Locator::Css("input[name='buttonSubmit']")).await?.click().await?;
     Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<(), fantoccini::error::CmdError> {
-    boot_chromedriver().await;
-    print!("hoge");
-    let c = ClientBuilder::native()
+    // boot_chromedriver().await;
+    let mut c = ClientBuilder::native()
         // .capabilities(create_cap())
         .connect("http://localhost:9515")
         .await
         .expect("failed to connect to WebDriver");
-    // let items = get_items(c).await.expect("error");
-    search_lib(c).await?;
-    Ok(())
+    let items = get_items(c.clone()).await.expect("error");
+    search_lib(c.clone()).await?;
+    c.close().await
 }
